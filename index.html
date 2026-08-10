@@ -55,8 +55,8 @@
         <div>
           <label class="block font-semibold text-slate-600 mb-1">Jenis Transaksi</label>
           <select id="jenis" class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-            <option value="MASUK">Pemasukan (Iuran / Infaq / Sumbangan)</option>
-            <option value="KELUAR">Pengeluaran (Santunan / Operasional)</option>
+            <option value="masuk">Pemasukan (Iuran / Infaq / Sumbangan)</option>
+            <option value="keluar">Pengeluaran (Santunan / Operasional)</option>
           </select>
         </div>
         <div>
@@ -127,7 +127,6 @@
     };
 
     firebase.initializeApp(firebaseConfig);
-    // Path folder disesuaikan dengan database: 'transaksi_yasinan'
     const db = firebase.database().ref('transaksi_yasinan');
 
     const ADMIN_PASSWORD = "abah123";
@@ -159,7 +158,7 @@
     document.getElementById('transaksiForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const tanggal = document.getElementById('tanggal').value;
-      const jenis = document.getElementById('jenis').value;
+      const jenis = document.getElementById('jenis').value.toLowerCase();
       const nominal = parseFloat(document.getElementById('nominal').value);
       const keterangan = document.getElementById('keterangan').value.trim();
 
@@ -191,8 +190,9 @@
       let keluar = 0;
 
       Object.values(rawData).forEach(item => {
-        if (item.jenis === 'MASUK') masuk += Number(item.nominal);
-        if (item.jenis === 'KELUAR') keluar += Number(item.nominal);
+        const j = String(item.jenis || '').toLowerCase();
+        if (j === 'masuk') masuk += Number(item.nominal || 0);
+        if (j === 'keluar') keluar += Number(item.nominal || 0);
       });
 
       document.getElementById('totalMasuk').textContent = `Rp ${masuk.toLocaleString('id-ID')}`;
@@ -207,7 +207,7 @@
 
       Object.values(rawData).forEach(item => {
         if (item.tanggal) {
-          const bulanTahun = item.tanggal.substring(0, 7); // Format: YYYY-MM
+          const bulanTahun = item.tanggal.substring(0, 7);
           bulanSet.add(bulanTahun);
         }
       });
@@ -243,7 +243,8 @@
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50";
 
-        const isMasuk = item.jenis === 'MASUK';
+        const j = String(item.jenis || '').toLowerCase();
+        const isMasuk = j === 'masuk';
         const badgeClass = isMasuk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
         const nominalClass = isMasuk ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
 
@@ -251,9 +252,9 @@
 
         tr.innerHTML = `
           <td class="p-3 text-slate-500">${tglFormatted}</td>
-          <td class="p-3 font-medium text-slate-700">${item.keterangan}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${item.jenis}</span></td>
-          <td class="p-3 ${nominalClass}">Rp ${Number(item.nominal).toLocaleString('id-ID')}</td>
+          <td class="p-3 font-medium text-slate-700">${item.keterangan || '-'}</td>
+          <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${j.toUpperCase()}</span></td>
+          <td class="p-3 ${nominalClass}">Rp ${Number(item.nominal || 0).toLocaleString('id-ID')}</td>
           <td class="p-3 text-center action-col">
             ${isAdmin ? `<button onclick="hapusTransaksi('${key}')" class="text-rose-500 hover:text-rose-700 font-semibold">Hapus</button>` : '-'}
           </td>
