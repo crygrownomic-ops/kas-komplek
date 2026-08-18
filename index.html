@@ -4,118 +4,145 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kas Alur Dana Duka Komplek</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+  <!-- SheetJS untuk Export Excel (.XLSX) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans min-h-screen p-4 md:p-8">
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen p-3 md:p-8">
 
-  <div class="max-w-4xl mx-auto space-y-6">
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2 pointer-events-none"></div>
+
+  <div class="max-w-5xl mx-auto space-y-6">
     
     <!-- Header -->
-    <header class="bg-emerald-800 text-white rounded-2xl p-6 shadow-md relative text-center">
-      <h1 class="text-xl md:text-2xl font-bold">Kas Alur Dana Duka Komplek Didis Permai 6 Blok E - F</h1>
-      <p class="text-emerald-200 text-xs mt-1">Laporan Real-Time Pemasukan & Pengeluaran</p>
-      <div class="mt-4 md:mt-0 md:absolute md:top-6 md:right-6">
-        <button id="adminAuthBtn" onclick="toggleAdmin()" class="bg-emerald-700 hover:bg-emerald-900 text-white text-xs px-3 py-1.5 rounded-lg border border-emerald-600 transition shadow-sm">
-          🔑 Login Admin
+    <header class="bg-gradient-to-r from-emerald-800 to-teal-900 text-white rounded-3xl p-6 shadow-lg relative text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+      <div>
+        <h1 class="text-xl md:text-2xl font-extrabold tracking-tight">Kas Alur Dana Duka Komplek</h1>
+        <p class="text-emerald-200 text-xs mt-1">Didis Permai 6 Blok E - F | Laporan Real-Time Pemasukan & Pengeluaran</p>
+      </div>
+      <div>
+        <button id="adminAuthBtn" onclick="toggleAdmin()" class="bg-emerald-700/80 hover:bg-emerald-900 text-white text-xs px-4 py-2 rounded-xl border border-emerald-500/50 transition shadow font-semibold flex items-center gap-2">
+          <span>🔑</span> <span id="adminBtnText">Login Admin</span>
         </button>
       </div>
     </header>
 
-    <!-- Ringkasan Saldo -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
-        <p class="text-xs font-semibold text-slate-500 uppercase">Total Kas Masuk</p>
-        <p id="totalMasuk" class="text-2xl font-bold text-emerald-600">Rp 0</p>
+    <!-- Ringkasan Saldo & Ringkasan Transaksi (4 Kartu) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-1">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Pemasukan</p>
+        <p id="totalMasuk" class="text-lg md:text-xl font-extrabold text-emerald-600">Rp 0</p>
       </div>
-      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
-        <p class="text-xs font-semibold text-slate-500 uppercase">Total Kas Keluar</p>
-        <p id="totalKeluar" class="text-2xl font-bold text-rose-600">Rp 0</p>
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-1">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Pengeluaran</p>
+        <p id="totalKeluar" class="text-lg md:text-xl font-extrabold text-rose-600">Rp 0</p>
       </div>
-      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-1">
-        <p class="text-xs font-semibold text-slate-500 uppercase">Sisa Saldo Kas</p>
-        <p id="sisaSaldo" class="text-2xl font-bold text-blue-600">Rp 0</p>
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-1">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Sisa Saldo Kas</p>
+        <p id="sisaSaldo" class="text-lg md:text-xl font-extrabold text-blue-600">Rp 0</p>
+      </div>
+      <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 space-y-1">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Transaksi</p>
+        <p id="totalCount" class="text-lg md:text-xl font-extrabold text-slate-700">0 Data</p>
       </div>
     </div>
 
-    <!-- Panel Input Admin -->
-    <div id="adminPanel" class="hidden bg-white p-6 rounded-2xl shadow-sm border-2 border-emerald-500 space-y-4">
+    <!-- Panel Input Admin (Tersembunyi Sebelum Login) -->
+    <div id="adminPanel" class="hidden bg-white p-6 rounded-3xl shadow-md border-2 border-emerald-500 space-y-4 transition-all">
       <div class="flex justify-between items-center border-b pb-3">
-        <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">⚡ Panel Input Admin</h2>
-        <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">Mode Admin Aktif</span>
+        <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">⚡ Panel Input Transaksi Admin</h2>
+        <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold">Mode Admin Aktif</span>
       </div>
       
       <form id="transaksiForm" class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
         <div>
-          <label class="block font-semibold text-slate-600 mb-1">Tanggal</label>
-          <input type="date" id="tanggal" required class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500">
+          <label class="block font-semibold text-slate-600 mb-1">Tanggal Transaksi</label>
+          <input type="date" id="tanggal" required class="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50">
         </div>
         <div>
           <label class="block font-semibold text-slate-600 mb-1">Jenis Transaksi</label>
-          <select id="jenis" class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 bg-white">
-            <option value="masuk">Pemasukan (Iuran / Infaq / Sumbangan)</option>
-            <option value="keluar">Pengeluaran (Santunan / Operasional)</option>
+          <select id="jenis" class="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 font-semibold">
+            <option value="masuk">🟢 PEMASUKAN (Iuran / Infaq / Sumbangan)</option>
+            <option value="keluar">🔴 PENGELUARAN (Santunan / Operasional)</option>
           </select>
         </div>
         <div>
           <label class="block font-semibold text-slate-600 mb-1">Nominal (Rp)</label>
-          <input type="number" id="nominal" placeholder="Contoh: 50000" required class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500">
+          <input type="number" id="nominal" placeholder="Contoh: 50000" min="1" required class="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50">
         </div>
         <div>
           <label class="block font-semibold text-slate-600 mb-1">Keterangan / Nama Warga</label>
-          <input type="text" id="keterangan" placeholder="Contoh: Iuran Bapak Ahmad Blok E" required class="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500">
+          <input type="text" id="keterangan" placeholder="Contoh: Terima Uang dari Pak RT (Dana Duka)" required class="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50">
         </div>
         <div class="md:col-span-2">
-          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition shadow">
-            Simpan Transaksi Baru
+          <button type="submit" id="submitBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition shadow-md active:scale-[0.99]">
+            ➕ Simpan Transaksi Baru
           </button>
         </div>
       </form>
     </div>
 
-    <!-- Tabel Riwayat Transaksi -->
-    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
-        <h2 class="text-base font-bold text-slate-800">Riwayat Transaksi</h2>
-        <div class="flex items-center gap-2 w-full sm:w-auto">
-          <select id="filterBulan" onchange="renderTable()" class="text-xs p-2 border rounded-lg outline-none bg-white">
+    <!-- Tabel Riwayat Transaksi & Filter -->
+    <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200/80 space-y-4">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">Riwayat Transaksi Kas</h2>
+          <p class="text-xs text-slate-400">Daftar pencatatan arus dana masuk & keluar</p>
+        </div>
+        
+        <!-- Action Control (Export Excel & Filter) -->
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          <input type="text" id="searchQuery" oninput="renderTable()" placeholder="🔍 Cari keterangan..." class="text-xs p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 w-full sm:w-40">
+          
+          <select id="filterBulan" onchange="renderTable()" class="text-xs p-2.5 border rounded-xl outline-none bg-slate-50 font-medium">
             <option value="SEMUA">Semua Bulan</option>
           </select>
-          <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3 py-2 rounded-lg font-bold transition flex items-center gap-1">
-            🖨️ Cetak Laporan / PDF
+
+          <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2.5 rounded-xl font-bold transition shadow-sm flex items-center gap-1.5 active:scale-95">
+            📊 Export Excel (.XLSX)
           </button>
         </div>
       </div>
 
+      <!-- Tabel Data -->
       <div class="overflow-x-auto">
         <table class="w-full text-left border-collapse text-xs">
           <thead>
-            <tr class="border-b bg-slate-50 text-slate-600 font-semibold uppercase">
-              <th class="p-3">Tanggal</th>
-              <th class="p-3">Keterangan</th>
+            <tr class="border-b bg-slate-50/80 text-slate-500 font-bold uppercase tracking-wider">
+              <th class="p-3 rounded-l-xl">Tanggal</th>
+              <th class="p-3">Keterangan / Uraian</th>
               <th class="p-3">Jenis</th>
-              <th class="p-3">Nominal</th>
-              <th class="p-3 text-center action-col">Aksi</th>
+              <th class="p-3">Nominal (Rp)</th>
+              <th class="p-3 text-center rounded-r-xl action-col">Aksi</th>
             </tr>
           </thead>
-          <tbody id="transaksiList" class="divide-y">
-            <tr><td colspan="5" class="text-center p-4 text-slate-400">Memuat data...</td></tr>
+          <tbody id="transaksiList" class="divide-y divide-slate-100">
+            <tr><td colspan="5" class="text-center p-6 text-slate-400">Memuat data dari database...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
 
     <!-- Footer -->
-    <footer class="text-center text-xs text-slate-400 pt-4">
-      Dibuat oleh <strong>Urai Ikhsan Fadhilah</strong> (Bendahara)
+    <footer class="text-center text-xs text-slate-400 pt-2 pb-6">
+      Dibuat oleh <strong>Urai Ikhsan Fadhilah</strong> (Bendahara) &bull; Modul Kas Komplek Didis Permai 6
     </footer>
 
   </div>
 
   <script>
-    // Config Firebase Kas Yasinan / Komplek
+    // ⚙️ Firebase Config Kas Yasinan / Komplek
     const firebaseConfig = {
       apiKey: "AIzaSyBGInTAAe366q8GUngM0GS--AbZZxPKXM",
       authDomain: "kas-yasinan.firebaseapp.com",
@@ -132,31 +159,56 @@
     const ADMIN_PASSWORD = "abah123";
     let isAdmin = false;
     let rawData = {};
+    let currentFilteredList = [];
 
     document.getElementById('tanggal').valueAsDate = new Date();
+
+    // 🔔 Sistem Toast Notification
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bgColor = type === 'success' ? 'bg-emerald-800' : 'bg-rose-800';
+      toast.className = `${bgColor} text-white text-xs px-4 py-3 rounded-xl shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto flex items-center gap-2 font-semibold`;
+      toast.innerHTML = `<span>${type === 'success' ? '✅' : '⚠️'}</span> <span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      }, 50);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
 
     function toggleAdmin() {
       if (!isAdmin) {
         const pass = prompt("Masukkan Kata Sandi Admin Kas:");
         if (pass === ADMIN_PASSWORD) {
           isAdmin = true;
-          alert("Login Admin Berhasil!");
+          showToast("Login Admin Berhasil!", "success");
           document.getElementById('adminPanel').classList.remove('hidden');
-          document.getElementById('adminAuthBtn').textContent = "🚪 Logout Admin";
+          document.getElementById('adminBtnText').textContent = "Logout Admin";
           renderTable();
         } else if (pass !== null) {
-          alert("Kata sandi salah!");
+          showToast("Kata sandi salah!", "error");
         }
       } else {
         isAdmin = false;
         document.getElementById('adminPanel').classList.add('hidden');
-        document.getElementById('adminAuthBtn').textContent = "🔑 Login Admin";
+        document.getElementById('adminBtnText').textContent = "Login Admin";
+        showToast("Mode Admin Dinonaktifkan.", "success");
         renderTable();
       }
     }
 
     document.getElementById('transaksiForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Menyimpan Data...";
+
       const tanggal = document.getElementById('tanggal').value;
       const jenis = document.getElementById('jenis').value.toLowerCase();
       const nominal = parseFloat(document.getElementById('nominal').value);
@@ -170,11 +222,14 @@
           keterangan: keterangan,
           timestamp: Date.now()
         });
-        alert("Transaksi Berhasil Disimpan!");
+        showToast("Transaksi Berhasil Disimpan!", "success");
         document.getElementById('nominal').value = '';
         document.getElementById('keterangan').value = '';
       } catch (err) {
-        alert("Gagal menyimpan data: " + err.message);
+        showToast("Gagal menyimpan data: " + err.message, "error");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "➕ Simpan Transaksi Baru";
       }
     });
 
@@ -185,11 +240,9 @@
       renderTable();
     });
 
-    // Fungsi ekstraksi angka nominal serbaguna
     function parseNominal(val) {
       if (!val) return 0;
       if (typeof val === 'number') return val;
-      // Jika tersimpan sebagai string (misal "250000" atau "250.000")
       let cleanStr = String(val).replace(/[^0-9.-]/g, '');
       let num = parseFloat(cleanStr);
       return isNaN(num) ? 0 : num;
@@ -198,10 +251,12 @@
     function updateSummary() {
       let masuk = 0;
       let keluar = 0;
+      let count = 0;
 
       Object.values(rawData).forEach(item => {
         const j = String(item.jenis || '').trim().toLowerCase();
         const nom = parseNominal(item.nominal);
+        count++;
 
         if (j === 'masuk') {
           masuk += nom;
@@ -213,6 +268,7 @@
       document.getElementById('totalMasuk').textContent = `Rp ${masuk.toLocaleString('id-ID')}`;
       document.getElementById('totalKeluar').textContent = `Rp ${keluar.toLocaleString('id-ID')}`;
       document.getElementById('sisaSaldo').textContent = `Rp ${(masuk - keluar).toLocaleString('id-ID')}`;
+      document.getElementById('totalCount').textContent = `${count} Transaksi`;
     }
 
     function updateFilterBulanOptions() {
@@ -246,20 +302,28 @@
       tbody.innerHTML = '';
 
       const filter = document.getElementById('filterBulan').value;
+      const query = document.getElementById('searchQuery').value.toLowerCase();
       const keys = Object.keys(rawData).reverse();
 
+      currentFilteredList = [];
+
       if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-slate-400">Belum ada data transaksi.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-6 text-slate-400">Belum ada data transaksi tersimpan.</td></tr>';
         return;
       }
 
       keys.forEach(key => {
         const item = rawData[key];
         const tgl = String(item.tanggal || '');
+        const ket = String(item.keterangan || '');
+
         if (filter !== 'SEMUA' && tgl && !tgl.startsWith(filter)) return;
+        if (query && !ket.toLowerCase().includes(query)) return;
+
+        currentFilteredList.push({ key, ...item });
 
         const tr = document.createElement('tr');
-        tr.className = "hover:bg-slate-50";
+        tr.className = "hover:bg-slate-50 transition-colors";
 
         const j = String(item.jenis || '').trim().toLowerCase();
         const isMasuk = j === 'masuk';
@@ -270,23 +334,78 @@
         const nom = parseNominal(item.nominal);
 
         tr.innerHTML = `
-          <td class="p-3 text-slate-500">${tglFormatted}</td>
-          <td class="p-3 font-medium text-slate-700">${item.keterangan || '-'}</td>
-          <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${j.toUpperCase() || 'MASUK'}</span></td>
+          <td class="p-3 text-slate-500 font-medium">${tglFormatted}</td>
+          <td class="p-3 font-semibold text-slate-700">${ket || '-'}</td>
+          <td class="p-3"><span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider ${badgeClass}">${j.toUpperCase() || 'MASUK'}</span></td>
           <td class="p-3 ${nominalClass}">Rp ${nom.toLocaleString('id-ID')}</td>
           <td class="p-3 text-center action-col">
-            ${isAdmin ? `<button onclick="hapusTransaksi('${key}')" class="text-rose-500 hover:text-rose-700 font-semibold">Hapus</button>` : '-'}
+            ${isAdmin ? `<button onclick="hapusTransaksi('${key}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition">Hapus</button>` : '-'}
           </td>
         `;
         tbody.appendChild(tr);
       });
+
+      if (currentFilteredList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-6 text-slate-400">Tidak ada data transaksi yang cocok.</td></tr>';
+      }
     }
 
     window.hapusTransaksi = async function(key) {
-      if (confirm('Yakin ingin menghapus transaksi ini?')) {
-        await db.child(key).remove();
+      if (confirm('Yakin ingin menghapus item transaksi ini?')) {
+        try {
+          await db.child(key).remove();
+          showToast("Data transaksi berhasil dihapus.", "success");
+        } catch (err) {
+          showToast("Gagal menghapus: " + err.message, "error");
+        }
       }
     };
+
+    // 📊 LOGIKA EXPORT LAPORAN KE EXCEL (.XLSX)
+    function exportToExcel() {
+      if (currentFilteredList.length === 0) {
+        showToast("Tidak ada data untuk di-export ke Excel.", "error");
+        return;
+      }
+
+      const dataExcel = currentFilteredList.map((item, index) => {
+        const j = String(item.jenis || '').trim().toLowerCase();
+        const isMasuk = j === 'masuk';
+        const nom = parseNominal(item.nominal);
+        const tglFormatted = item.tanggal ? item.tanggal.split('-').reverse().join('/') : '-';
+
+        return {
+          "No": index + 1,
+          "Tanggal": tglFormatted,
+          "Keterangan / Uraian": item.keterangan || "-",
+          "Jenis Transaksi": isMasuk ? "PEMASUKAN" : "PENGELUARAN",
+          "Pemasukan (Rp)": isMasuk ? nom : 0,
+          "Pengeluaran (Rp)": !isMasuk ? nom : 0
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataExcel);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Kas");
+
+      // Mengatur Lebar Kolom Otomatis
+      worksheet['!cols'] = [
+        { wch: 6 },  // No
+        { wch: 14 }, // Tanggal
+        { wch: 40 }, // Keterangan
+        { wch: 18 }, // Jenis
+        { wch: 18 }, // Pemasukan
+        { wch: 18 }  // Pengeluaran
+      ];
+
+      const filterBulanVal = document.getElementById('filterBulan').value;
+      const namaFile = filterBulanVal === 'SEMUA' 
+        ? `Laporan_Kas_Komplek_Didis_Permai_6_Semua.xlsx` 
+        : `Laporan_Kas_Komplek_Didis_Permai_6_${filterBulanVal}.xlsx`;
+
+      XLSX.writeFile(workbook, namaFile);
+      showToast("Laporan Excel Berhasil Di-download!", "success");
+    }
   </script>
 </body>
 </html>
