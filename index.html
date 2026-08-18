@@ -98,14 +98,14 @@
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
         <div>
           <h2 class="text-base font-bold text-slate-800">Riwayat Transaksi Kas</h2>
-          <p class="text-xs text-slate-400">Daftar pencatatan arus dana masuk & keluar</p>
+          <p class="text-xs text-slate-400">Menampilkan 10 transaksi terupdate per halaman</p>
         </div>
         
         <!-- Action Control (Export Excel & Filter) -->
         <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <input type="text" id="searchQuery" oninput="renderTable()" placeholder="🔍 Cari keterangan..." class="text-xs p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 w-full sm:w-40">
+          <input type="text" id="searchQuery" oninput="onFilterChange()" placeholder="🔍 Cari keterangan..." class="text-xs p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 w-full sm:w-40">
           
-          <select id="filterBulan" onchange="renderTable()" class="text-xs p-2.5 border rounded-xl outline-none bg-slate-50 font-medium">
+          <select id="filterBulan" onchange="onFilterChange()" class="text-xs p-2.5 border rounded-xl outline-none bg-slate-50 font-medium">
             <option value="SEMUA">Semua Bulan</option>
           </select>
 
@@ -132,6 +132,23 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Kontrol Paging Navigasi (10 Data per Halaman) -->
+      <div id="paginationControls" class="flex flex-col sm:flex-row justify-between items-center gap-3 pt-3 border-t text-xs text-slate-500">
+        <div id="pageInfo" class="font-medium">
+          Menampilkan 0 - 0 dari 0 transaksi
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="prevBtn" onclick="changePage(-1)" disabled class="bg-slate-100 text-slate-400 px-3 py-1.5 rounded-lg font-bold border transition disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-200 hover:text-slate-700">
+            ◀ Sebelum
+          </button>
+          <span id="currentPageBadge" class="px-3 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg">Hal 1</span>
+          <button id="nextBtn" onclick="changePage(1)" disabled class="bg-slate-100 text-slate-400 px-3 py-1.5 rounded-lg font-bold border transition disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-200 hover:text-slate-700">
+            Sesudah ▶
+          </button>
+        </div>
+      </div>
+
     </div>
 
     <!-- Footer -->
@@ -160,6 +177,10 @@
     let isAdmin = false;
     let rawData = {};
     let currentFilteredList = [];
+
+    // Variable Paging
+    let currentPage = 1;
+    const itemsPerPage = 10;
 
     document.getElementById('tanggal').valueAsDate = new Date();
 
@@ -225,6 +246,7 @@
         showToast("Transaksi Berhasil Disimpan!", "success");
         document.getElementById('nominal').value = '';
         document.getElementById('keterangan').value = '';
+        currentPage = 1; // Kembali ke halaman 1 saat transaksi baru ditambah
       } catch (err) {
         showToast("Gagal menyimpan data: " + err.message, "error");
       } finally {
@@ -237,7 +259,7 @@
       rawData = snapshot.val() || {};
       updateSummary();
       updateFilterBulanOptions();
-      renderTable();
+      onFilterChange();
     });
 
     function parseNominal(val) {
@@ -297,20 +319,18 @@
       select.value = selectedVal;
     }
 
-    function renderTable() {
-      const tbody = document.getElementById('transaksiList');
-      tbody.innerHTML = '';
+    function onFilterChange() {
+      currentPage = 1; // Reset ke halaman 1 setiap kali me-filter
+      applyFilter();
+      renderTable();
+    }
 
+    function applyFilter() {
       const filter = document.getElementById('filterBulan').value;
       const query = document.getElementById('searchQuery').value.toLowerCase();
       const keys = Object.keys(rawData).reverse();
 
       currentFilteredList = [];
-
-      if (keys.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-6 text-slate-400">Belum ada data transaksi tersimpan.</td></tr>';
-        return;
-      }
 
       keys.forEach(key => {
         const item = rawData[key];
@@ -321,7 +341,30 @@
         if (query && !ket.toLowerCase().includes(query)) return;
 
         currentFilteredList.push({ key, ...item });
+      });
+    }
 
+    function renderTable() {
+      const tbody = document.getElementById('transaksiList');
+      tbody.innerHTML = '';
+
+      if (currentFilteredList.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-6 text-slate-400">Belum ada data transaksi tersimpan.</td></tr>';
+        updatePaginationControls(0);
+        return;
+      }
+
+      // Hitung Paging
+      const totalItems = currentFilteredList.length;
+      const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+      
+      if (currentPage > totalPages) currentPage = totalPages;
+
+      const startIndex = (currentPage - 1) * itemsPerPage;
+      const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+      const pageData = currentFilteredList.slice(startIndex, endIndex);
+
+      pageData.forEach(item => {
         const tr = document.createElement('tr');
         tr.className = "hover:bg-slate-50 transition-colors";
 
@@ -330,24 +373,48 @@
         const badgeClass = isMasuk ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
         const nominalClass = isMasuk ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
 
-        const tglFormatted = tgl ? tgl.split('-').reverse().join('/') : '-';
+        const tglFormatted = item.tanggal ? String(item.tanggal).split('-').reverse().join('/') : '-';
         const nom = parseNominal(item.nominal);
 
         tr.innerHTML = `
           <td class="p-3 text-slate-500 font-medium">${tglFormatted}</td>
-          <td class="p-3 font-semibold text-slate-700">${ket || '-'}</td>
+          <td class="p-3 font-semibold text-slate-700">${item.keterangan || '-'}</td>
           <td class="p-3"><span class="px-2.5 py-1 rounded-lg text-[10px] font-extrabold tracking-wider ${badgeClass}">${j.toUpperCase() || 'MASUK'}</span></td>
           <td class="p-3 ${nominalClass}">Rp ${nom.toLocaleString('id-ID')}</td>
           <td class="p-3 text-center action-col">
-            ${isAdmin ? `<button onclick="hapusTransaksi('${key}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition">Hapus</button>` : '-'}
+            ${isAdmin ? `<button onclick="hapusTransaksi('${item.key}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1 rounded-lg text-[11px] font-bold transition">Hapus</button>` : '-'}
           </td>
         `;
         tbody.appendChild(tr);
       });
 
-      if (currentFilteredList.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center p-6 text-slate-400">Tidak ada data transaksi yang cocok.</td></tr>';
+      updatePaginationControls(totalItems, startIndex + 1, endIndex, totalPages);
+    }
+
+    function updatePaginationControls(totalItems, from = 0, to = 0, totalPages = 1) {
+      const prevBtn = document.getElementById('prevBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const pageInfo = document.getElementById('pageInfo');
+      const currentPageBadge = document.getElementById('currentPageBadge');
+
+      if (totalItems === 0) {
+        pageInfo.textContent = "Menampilkan 0 dari 0 transaksi";
+        prevBtn.disabled = true;
+        nextBtn.disabled = true;
+        currentPageBadge.textContent = "Hal 1";
+        return;
       }
+
+      pageInfo.textContent = `Menampilkan ${from} - ${to} dari ${totalItems} transaksi`;
+      currentPageBadge.textContent = `Hal ${currentPage} / ${totalPages}`;
+
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage >= totalPages;
+    }
+
+    function changePage(direction) {
+      currentPage += direction;
+      renderTable();
     }
 
     window.hapusTransaksi = async function(key) {
@@ -361,7 +428,7 @@
       }
     };
 
-    // 📊 LOGIKA EXPORT LAPORAN KE EXCEL (.XLSX)
+    // 📊 LOGIKA EXPORT LAPORAN KE EXCEL (Seluruh Filtered Data)
     function exportToExcel() {
       if (currentFilteredList.length === 0) {
         showToast("Tidak ada data untuk di-export ke Excel.", "error");
@@ -372,7 +439,7 @@
         const j = String(item.jenis || '').trim().toLowerCase();
         const isMasuk = j === 'masuk';
         const nom = parseNominal(item.nominal);
-        const tglFormatted = item.tanggal ? item.tanggal.split('-').reverse().join('/') : '-';
+        const tglFormatted = item.tanggal ? String(item.tanggal).split('-').reverse().join('/') : '-';
 
         return {
           "No": index + 1,
@@ -388,14 +455,14 @@
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Kas");
 
-      // Mengatur Lebar Kolom Otomatis
+      // Lebar Kolom Otomatis
       worksheet['!cols'] = [
-        { wch: 6 },  // No
-        { wch: 14 }, // Tanggal
-        { wch: 40 }, // Keterangan
-        { wch: 18 }, // Jenis
-        { wch: 18 }, // Pemasukan
-        { wch: 18 }  // Pengeluaran
+        { wch: 6 },
+        { wch: 14 },
+        { wch: 40 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 }
       ];
 
       const filterBulanVal = document.getElementById('filterBulan').value;
