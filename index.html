@@ -11,6 +11,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <!-- SheetJS untuk Export Excel (.XLSX) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js untuk Grafik Visualisasi -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -58,8 +60,21 @@
       </div>
     </div>
 
+    <!-- 📊 OPSI 2: Grafik Visualisasi Kas Bulanan -->
+    <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200/80 space-y-4">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div>
+          <h2 class="text-base font-bold text-slate-800">📊 Grafik Perbandingan Kas Bulanan</h2>
+          <p class="text-xs text-slate-400">Visualisasi tren Pemasukan vs Pengeluaran per bulan</p>
+        </div>
+      </div>
+      <div class="relative w-full h-64 md:h-72">
+        <canvas id="kasChart"></canvas>
+      </div>
+    </div>
+
     <!-- Panel Input Admin (Tersembunyi Sebelum Login) -->
-    <div id="adminPanel" class="hidden bg-white p-6 rounded-3xl shadow-md border-2 border-emerald-500 space-y-4 transition-all">
+    <div id="adminPanel" class="hidden bg-white p-6 rounded-3xl shadow-md border-2 border-emerald-500 space-y-6 transition-all">
       <div class="flex justify-between items-center border-b pb-3">
         <h2 class="text-sm font-bold text-slate-800 flex items-center gap-2">⚡ Panel Input Transaksi Admin</h2>
         <span class="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full font-bold">Mode Admin Aktif</span>
@@ -79,7 +94,6 @@
         </div>
         <div>
           <label class="block font-semibold text-slate-600 mb-1">Nominal (Rp) — Format Titik Otomatis</label>
-          <!-- Menggunakan type="text" dengan pemformatan titik ribuan otomatis -->
           <input type="text" id="nominalFormatted" oninput="formatRupiahInput(this)" placeholder="Contoh: 50.000" required class="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50 font-bold text-emerald-700">
           
           <!-- Tombol Cepat Pilihan Nominal -->
@@ -100,6 +114,22 @@
           </button>
         </div>
       </form>
+
+      <!-- 💾 OPSI 5: Fitur Backup & Restore Data Manual (Panel Admin) -->
+      <div class="border-t pt-4 space-y-2">
+        <h3 class="text-xs font-bold text-slate-700">💾 Pengelolaan Backup & Restore Database</h3>
+        <p class="text-[11px] text-slate-400">Unduh cadangan data fisik atau kembalikan data dari berkas JSON.</p>
+        <div class="flex flex-wrap gap-2 pt-1">
+          <button onclick="downloadBackupJSON()" class="bg-slate-800 hover:bg-slate-900 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition flex items-center gap-1.5">
+            📥 Download Backup JSON
+          </button>
+          
+          <label class="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3.5 py-2 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5">
+            📤 Restore / Unggah Backup
+            <input type="file" id="restoreFileInput" accept=".json" onchange="restoreBackupJSON(event)" class="hidden">
+          </label>
+        </div>
+      </div>
     </div>
 
     <!-- Tabel Riwayat Transaksi & Filter -->
@@ -186,6 +216,7 @@
     let isAdmin = false;
     let rawData = {};
     let currentFilteredList = [];
+    let kasChartInstance = null;
 
     // Variable Paging
     let currentPage = 1;
@@ -193,7 +224,7 @@
 
     document.getElementById('tanggal').valueAsDate = new Date();
 
-    // 💰 Fungsi Pemformat Titik Ribuan Real-time saat Mengetik
+    // 💰 Pemformat Titik Ribuan Real-time saat Mengetik
     function formatRupiahInput(input) {
       let value = input.value.replace(/[^0-9]/g, '');
       if (value) {
@@ -257,7 +288,6 @@
       const tanggal = document.getElementById('tanggal').value;
       const jenis = document.getElementById('jenis').value.toLowerCase();
       
-      // Ambil angka murni tanpa titik
       const rawNominalStr = document.getElementById('nominalFormatted').value.replace(/[^0-9]/g, '');
       const nominal = parseFloat(rawNominalStr);
       const keterangan = document.getElementById('keterangan').value.trim();
@@ -293,6 +323,7 @@
       rawData = snapshot.val() || {};
       updateSummary();
       updateFilterBulanOptions();
+      updateChart();
       onFilterChange();
     });
 
@@ -325,6 +356,80 @@
       document.getElementById('totalKeluar').textContent = `Rp ${keluar.toLocaleString('id-ID')}`;
       document.getElementById('sisaSaldo').textContent = `Rp ${(masuk - keluar).toLocaleString('id-ID')}`;
       document.getElementById('totalCount').textContent = `${count} Transaksi`;
+    }
+
+    // 📊 FUNGSI UPDATE GRAFIK BULANAN (Chart.js)
+    function updateChart() {
+      const monthlyData = {};
+
+      Object.values(rawData).forEach(item => {
+        if (item.tanggal) {
+          const bulanTahun = String(item.tanggal).substring(0, 7); // YYYY-MM
+          if (bulanTahun.length === 7) {
+            if (!monthlyData[bulanTahun]) {
+              monthlyData[bulanTahun] = { masuk: 0, keluar: 0 };
+            }
+            const j = String(item.jenis || '').trim().toLowerCase();
+            const nom = parseNominal(item.nominal);
+            if (j === 'masuk') monthlyData[bulanTahun].masuk += nom;
+            if (j === 'keluar') monthlyData[bulanTahun].keluar += nom;
+          }
+        }
+      });
+
+      const sortedMonths = Object.keys(monthlyData).sort();
+      const labels = [];
+      const dataMasuk = [];
+      const dataKeluar = [];
+
+      sortedMonths.forEach(bt => {
+        const [y, m] = bt.split('-');
+        const namaBulan = new Date(y, m - 1).toLocaleString('id-ID', { month: 'short' });
+        labels.push(`${namaBulan} ${y}`);
+        dataMasuk.push(monthlyData[bt].masuk);
+        dataKeluar.push(monthlyData[bt].keluar);
+      });
+
+      const ctx = document.getElementById('kasChart').getContext('2d');
+      if (kasChartInstance) kasChartInstance.destroy();
+
+      kasChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Pemasukan (Rp)',
+              data: dataMasuk,
+              backgroundColor: '#10b981',
+              borderRadius: 6
+            },
+            {
+              label: 'Pengeluaran (Rp)',
+              data: dataKeluar,
+              backgroundColor: '#f43f5e',
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return 'Rp ' + value.toLocaleString('id-ID');
+                }
+              }
+            }
+          }
+        }
+      });
     }
 
     function updateFilterBulanOptions() {
@@ -503,6 +608,46 @@
 
       XLSX.writeFile(workbook, namaFile);
       showToast("Laporan Excel Berhasil Di-download!", "success");
+    }
+
+    // 💾 OPSI 5: FUNGSI DOWNLOAD BACKUP JSON
+    function downloadBackupJSON() {
+      if (Object.keys(rawData).length === 0) {
+        showToast("Database kosong, tidak ada data untuk dicadangkan.", "error");
+        return;
+      }
+
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(rawData, null, 2));
+      const downloadAnchor = document.createElement('a');
+      const nowStr = new Date().toISOString().split('T')[0];
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `Backup_Kas_Komplek_${nowStr}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      showToast("File backup JSON berhasil diunduh!", "success");
+    }
+
+    // 🔄 OPSI 5: FUNGSI RESTORE BACKUP JSON
+    function restoreBackupJSON(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const restoredData = JSON.parse(e.target.result);
+          if (confirm("Peringatan! Mengunggah file backup akan menimpa/memperbarui seluruh data saat ini. Lanjutkan?")) {
+            await db.set(restoredData);
+            showToast("Database berhasil dipulihkan dari file backup!", "success");
+          }
+        } catch (err) {
+          showToast("Gagal memulihkan database: Format file JSON tidak valid.", "error");
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
     }
   </script>
 </body>
