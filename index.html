@@ -60,7 +60,7 @@
       </div>
     </div>
 
-    <!-- 📊 OPSI 2: Grafik Visualisasi Kas Bulanan -->
+    <!-- 📊 Grafik Visualisasi Kas Bulanan -->
     <div class="bg-white p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200/80 space-y-4">
       <div class="flex justify-between items-center border-b pb-3">
         <div>
@@ -115,7 +115,7 @@
         </div>
       </form>
 
-      <!-- 💾 OPSI 5: Fitur Backup & Restore Data Manual (Panel Admin) -->
+      <!-- Fitur Backup & Restore Data Manual (Panel Admin) -->
       <div class="border-t pt-4 space-y-2">
         <h3 class="text-xs font-bold text-slate-700">💾 Pengelolaan Backup & Restore Database</h3>
         <p class="text-[11px] text-slate-400">Unduh cadangan data fisik atau kembalikan data dari berkas JSON.</p>
@@ -358,13 +358,12 @@
       document.getElementById('totalCount').textContent = `${count} Transaksi`;
     }
 
-    // 📊 FUNGSI UPDATE GRAFIK BULANAN (Chart.js)
     function updateChart() {
       const monthlyData = {};
 
       Object.values(rawData).forEach(item => {
         if (item.tanggal) {
-          const bulanTahun = String(item.tanggal).substring(0, 7); // YYYY-MM
+          const bulanTahun = String(item.tanggal).substring(0, 7);
           if (bulanTahun.length === 7) {
             if (!monthlyData[bulanTahun]) {
               monthlyData[bulanTahun] = { masuk: 0, keluar: 0 };
@@ -566,51 +565,100 @@
       }
     };
 
+    // 📊 EXPORT LAPORAN EXCEL PROFESIONAL DENGAN JUDUL & TOTAL SISA SALDO
     function exportToExcel() {
       if (currentFilteredList.length === 0) {
         showToast("Tidak ada data untuk di-export ke Excel.", "error");
         return;
       }
 
-      const dataExcel = currentFilteredList.map((item, index) => {
+      const filterBulanVal = document.getElementById('filterBulan').value;
+      let periodeText = "Semua Periode";
+      if (filterBulanVal !== 'SEMUA') {
+        const [y, m] = filterBulanVal.split('-');
+        const namaBulan = new Date(y, m - 1).toLocaleString('id-ID', { month: 'long' });
+        periodeText = `${namaBulan} ${y}`;
+      }
+
+      const tglCetak = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+
+      // Build Baris Data Excel
+      const excelRows = [];
+
+      // Kop Judul Laporan (Baris 1 - 4)
+      excelRows.push(["LAPORAN KEUANGAN KAS ALUR DANA DUKA KOMPLEK"]);
+      excelRows.push(["Didis Permai 6 Blok E - F"]);
+      excelRows.push([`Periode: ${periodeText} | Tanggal Cetak: ${tglCetak}`]);
+      excelRows.push([]); // Baris kosong pembatas
+
+      // Header Tabel (Baris 5)
+      excelRows.push(["No", "Tanggal", "Keterangan / Uraian", "Jenis Transaksi", "Pemasukan (Rp)", "Pengeluaran (Rp)"]);
+
+      let totalPemasukan = 0;
+      let totalPengeluaran = 0;
+
+      // Urutkan data berdasarkan tanggal termuda ke tertua untuk laporan
+      const sortedExportList = [...currentFilteredList].reverse();
+
+      sortedExportList.forEach((item, index) => {
         const j = String(item.jenis || '').trim().toLowerCase();
         const isMasuk = j === 'masuk';
         const nom = parseNominal(item.nominal);
         const tglFormatted = item.tanggal ? String(item.tanggal).split('-').reverse().join('/') : '-';
 
-        return {
-          "No": index + 1,
-          "Tanggal": tglFormatted,
-          "Keterangan / Uraian": item.keterangan || "-",
-          "Jenis Transaksi": isMasuk ? "PEMASUKAN" : "PENGELUARAN",
-          "Pemasukan (Rp)": isMasuk ? nom : 0,
-          "Pengeluaran (Rp)": !isMasuk ? nom : 0
-        };
+        let masukNom = 0;
+        let keluarNom = 0;
+
+        if (isMasuk) {
+          masukNom = nom;
+          totalPemasukan += nom;
+        } else {
+          keluarNom = nom;
+          totalPengeluaran += nom;
+        }
+
+        excelRows.push([
+          index + 1,
+          tglFormatted,
+          item.keterangan || "-",
+          isMasuk ? "PEMASUKAN" : "PENGELUARAN",
+          masukNom,
+          keluarNom
+        ]);
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(dataExcel);
+      const sisaSaldo = totalPemasukan - totalPengeluaran;
+      const dataStartRow = 6;
+      const dataEndRow = dataStartRow + sortedExportList.length - 1;
+
+      // Baris Ringkasan Total & Sisa Saldo
+      excelRows.push([]); // Baris kosong
+      excelRows.push(["", "", "", "TOTAL PEMASUKAN", { t: 'n', f: `SUM(E${dataStartRow}:E${dataEndRow})` }, ""]);
+      excelRows.push(["", "", "", "TOTAL PENGELUARAN", "", { t: 'n', f: `SUM(F${dataStartRow}:F${dataEndRow})` }]);
+      excelRows.push(["", "", "", "SISA SALDO KAS TERSISA", { t: 'n', f: `E${dataEndRow + 2}-F${dataEndRow + 3}` }, ""]);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(excelRows);
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Kas");
 
+      // Mengatur Lebar Kolom
       worksheet['!cols'] = [
-        { wch: 6 },
-        { wch: 14 },
-        { wch: 40 },
-        { wch: 18 },
-        { wch: 18 },
-        { wch: 18 }
+        { wch: 6 },  // No
+        { wch: 14 }, // Tanggal
+        { wch: 45 }, // Keterangan
+        { wch: 18 }, // Jenis
+        { wch: 20 }, // Pemasukan
+        { wch: 20 }  // Pengeluaran
       ];
 
-      const filterBulanVal = document.getElementById('filterBulan').value;
       const namaFile = filterBulanVal === 'SEMUA' 
         ? `Laporan_Kas_Komplek_Didis_Permai_6_Semua.xlsx` 
         : `Laporan_Kas_Komplek_Didis_Permai_6_${filterBulanVal}.xlsx`;
 
       XLSX.writeFile(workbook, namaFile);
-      showToast("Laporan Excel Berhasil Di-download!", "success");
+      showToast("Laporan Excel Rapi Berhasil Di-download!", "success");
     }
 
-    // 💾 OPSI 5: FUNGSI DOWNLOAD BACKUP JSON
     function downloadBackupJSON() {
       if (Object.keys(rawData).length === 0) {
         showToast("Database kosong, tidak ada data untuk dicadangkan.", "error");
@@ -629,7 +677,6 @@
       showToast("File backup JSON berhasil diunduh!", "success");
     }
 
-    // 🔄 OPSI 5: FUNGSI RESTORE BACKUP JSON
     function restoreBackupJSON(event) {
       const file = event.target.files[0];
       if (!file) return;
